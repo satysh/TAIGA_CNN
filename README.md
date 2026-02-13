@@ -55,8 +55,8 @@ train_loader, test_loader = dataset.create_data_loader(
     batch_size=256,
     train_portion=0.95
 )
-
----
+```
+## Data description
 
 Main goal of our telescopes is to detect gamma-quants from various astrophysical sources. The difficulty is that ratio between gamma flux and hadron flux is about 10^-5. Therefore, we need to filter out as much of  the hadronic background as possible and it seems that convolution and/or graph neural networks could be useful in this task.
 
