@@ -33,11 +33,12 @@ class CorsikaData:
     EVENT_SIZE_THRESHOLD = 120
     PIXEL_BRIGHT_THRESHOLD = 7
 
-    def __init__(self):
+    def __init__(self, debug_first_events=0):
         self.data = np.empty((0, 1, self.IMAGE_SIZE, self.IMAGE_SIZE), dtype=np.float32)
         self.labels = np.empty((0,), dtype=np.float32)
         self.train_indices = np.array([], dtype=np.int64)
         self.test_indices = np.array([], dtype=np.int64)
+        self.debug_first_events = max(int(debug_first_events), 0)
 
     def load(self, files):
         for file_name in files:
@@ -48,11 +49,16 @@ class CorsikaData:
         events = []
         labels = []
 
+        event_counter = 0
+
         with file_name.open("rb") as file_in_bytes:
             header_chunk = file_in_bytes.read(self.HEADER_SIZE)
 
             while header_chunk:
-                _, _, _, _ = struct.unpack("<4i", header_chunk[0:16])
+                # 4 int32 — служебная информация (сейчас не используется)
+                _n_run, _n_scattering, _n_telescope, _n_photoelectrons = struct.unpack(
+                    "<4i", header_chunk[0:16]
+                )
                 header_values = struct.unpack("<20d", header_chunk[16:176])
                 particle_type = header_values[7]
                 (n_pixels,) = struct.unpack("<i", header_chunk[176:180])
@@ -60,9 +66,16 @@ class CorsikaData:
                 event = np.zeros((self.IMAGE_SIZE, self.IMAGE_SIZE), dtype=np.float32)
                 event_size = 0
 
-                for _ in range(n_pixels):
+                for pixel_idx in range(n_pixels):
                     pixel_chunk = file_in_bytes.read(self.PIXEL_AMPLITUDE_SIZE)
                     amplitude, row_number, column_number = struct.unpack("<3i", pixel_chunk[0:12])
+
+                    if event_counter < self.debug_first_events:
+                        print(
+                            f"[event {event_counter:3d}] "
+                            f"pix {pixel_idx:3d} | amp={amplitude:4d} "
+                            f"| row={row_number:3d} col={column_number:3d}"
+                        )
 
                     row = row_number + self.IMAGE_CENTER_SHIFT
                     col = column_number + self.IMAGE_CENTER_SHIFT
@@ -79,6 +92,8 @@ class CorsikaData:
                         labels.append(0.0)
                     else:
                         raise ValueError(f"Unsupported particle_type: {particle_type}")
+
+                event_counter += 1
 
                 header_chunk = file_in_bytes.read(self.HEADER_SIZE)
 
