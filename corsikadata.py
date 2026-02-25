@@ -102,6 +102,13 @@ class CorsikaData:
                     # время (читается, но не используется)
                     average_time, std_time = \
                         struct.unpack('<2d', pixel_chunk[12:28])
+                    
+                    if event_counter < 2:  # первые 2 события  логи
+                        print(
+                        f"[event {event_counter:3d}] "
+                        f"pix {i:3d} | amp={amplitude:4d} "
+                        f"| row={row_number:3d} col={column_number:3d}"
+                    )
 
                     # кладём амплитуду в центрированную матрицу
                     tmp_event[row_number + 13, column_number + 13] = amplitude
