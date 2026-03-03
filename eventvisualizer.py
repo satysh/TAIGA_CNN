@@ -3,89 +3,105 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import RegularPolygon
 from matplotlib.collections import PatchCollection
 
-D_PMT = 15.0
-SIN60 = np.sqrt(3) / 2
-
 
 class EventVisualizer:
+    """
+    Универсальный визуализатор:
+      - поддерживает новый CleanEventDataset (через build_cnn_image/get_event_pixels)
+      - сохраняет совместимость со старым интерфейсом (dataset.data)
+    """
 
-    def draw_event(self, dataset, event_idx, log_scale=False):
-        image = dataset.data[event_idx, 0]
+    def draw_event(self, dataset, event_idx, log_scale=False, center_mode="mean"):
+        # --- Новый формат датасета ---
+        if hasattr(dataset, "build_cnn_image") and hasattr(dataset, "get_event_pixels"):
+            image = dataset.build_cnn_image(event_idx, center_mode=center_mode)
 
-        fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+            fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-        # ===== LEFT =====
-        im = axes[0].imshow(
-            np.log10(image + 1e-3) if log_scale else image,
-            origin="lower",
-            cmap="jet",
-            extent=[-13, 13, -13, 13]
-        )
-        axes[0].set_aspect("equal")
-        axes[0].set_title("CNN grid")
-        plt.colorbar(im, ax=axes[0], fraction=0.046)
+            # LEFT: CNN grid
+            im = axes[0].imshow(
+                np.log10(image + 1e-3) if log_scale else image,
+                origin="lower",
+                cmap="jet",
+                extent=[-13, 13, -13, 13],
+            )
+            axes[0].set_aspect("equal")
+            axes[0].set_title(f"CNN grid (27x27 pad), centered={center_mode}")
+            plt.colorbar(im, ax=axes[0], fraction=0.046)
 
-        # ===== RIGHT =====
-        patches = []
-        colors = []
-        xs_all = []
-        ys_all = []
+            # RIGHT: реальная геометрия камеры
+            x, y, a = dataset.get_event_pixels(event_idx)
+            cam_colors = np.full(len(dataset.camera_xy), np.nan, dtype=np.float64)
 
-        for i in range(27):
-            for j in range(27):
+            for xi, yi, ai in zip(x, y, a):
+                key = dataset._xy_key(xi, yi)
+                idx = dataset.camera_key_to_idx.get(key, None)
+                if idx is None:
+                    continue
+                if ai > 0:
+                    cam_colors[idx] = np.log10(ai + 1e-3) if log_scale else ai
 
-                Nr = i - 13
-                Nc = j - 13
-
-                # ПРАВИЛЬНАЯ гекс-сетка
-                x = D_PMT * (Nc + 0.5 * (Nr & 1))
-                y = D_PMT * Nr * SIN60
-
-                xs_all.append(x)
-                ys_all.append(y)
-
-                hexagon = RegularPolygon(
-                    (x, y),
-                    numVertices=6,
-                    radius=D_PMT / np.sqrt(3),
-                    orientation=0
+            patches = []
+            for (cx, cy) in dataset.camera_xy:
+                patches.append(
+                    RegularPolygon(
+                        (cx, cy),
+                        numVertices=6,
+                        radius=dataset.hex_radius,
+                        orientation=0,
+                    )
                 )
 
-                patches.append(hexagon)
+            collection = PatchCollection(
+                patches,
+                cmap="jet",
+                edgecolor="black",
+                linewidth=0.2,
+            )
+            collection.set_array(cam_colors)
 
-                amp = image[i, j]
-                if amp > 0:
-                    colors.append(np.log10(amp + 1e-3) if log_scale else amp)
-                else:
-                    colors.append(np.nan)
+            finite = np.isfinite(cam_colors)
+            if np.any(finite):
+                collection.set_clim(
+                    np.nanmin(cam_colors[finite]),
+                    np.nanmax(cam_colors[finite]),
+                )
 
-        collection = PatchCollection(
-            patches,
-            cmap="jet",
-            edgecolor="black",
-            linewidth=0.3
+            axes[1].add_collection(collection)
+
+            cam_xy = np.array(dataset.camera_xy, dtype=np.float64)
+            xmin, ymin = cam_xy.min(axis=0)
+            xmax, ymax = cam_xy.max(axis=0)
+            pad = dataset.pitch * 2.0
+
+            axes[1].set_xlim(xmin - pad, xmax + pad)
+            axes[1].set_ylim(ymin - pad, ymax + pad)
+            axes[1].set_aspect("equal")
+            axes[1].set_title("PMT camera (full mask, fixed scale)")
+            plt.colorbar(collection, ax=axes[1], fraction=0.046)
+
+            plt.tight_layout()
+            plt.show()
+            return
+
+        # --- Старый формат датасета (обратная совместимость) ---
+        if hasattr(dataset, "data"):
+            image = dataset.data[event_idx, 0]
+            fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+            im = ax.imshow(
+                np.log10(image + 1e-3) if log_scale else image,
+                origin="lower",
+                cmap="jet",
+                extent=[-13, 13, -13, 13],
+            )
+            ax.set_aspect("equal")
+            ax.set_title("CNN grid")
+            plt.colorbar(im, ax=ax, fraction=0.046)
+            plt.tight_layout()
+            plt.show()
+            return
+
+        raise AttributeError(
+            "Unsupported dataset format: expected either "
+            "(build_cnn_image + get_event_pixels) or data attribute"
         )
-
-        arr = np.array(colors)
-        collection.set_array(arr)
-        collection.set_clim(
-            vmin=np.nanmin(arr[np.isfinite(arr)]),
-            vmax=np.nanmax(arr[np.isfinite(arr)])
-        )
-
-        axes[1].add_collection(collection)
-
-        # центрирование
-        lim = max(abs(np.array(xs_all)).max(),
-                  abs(np.array(ys_all)).max())
-
-        axes[1].set_xlim(-lim, lim)
-        axes[1].set_ylim(-lim, lim)
-        axes[1].set_aspect("equal")
-
-        axes[1].set_title("PMT camera (correct hex geometry)")
-
-        plt.colorbar(collection, ax=axes[1], fraction=0.046)
-
-        plt.tight_layout()
-        plt.show()
