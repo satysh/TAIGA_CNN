@@ -124,6 +124,9 @@ Precision: 0.995188
 Recall   : 0.990421
 
 F1-score : 0.992799
+
+Test ROC AUC: 0.9989281886387996
+
 ---
 
 
