@@ -1,4 +1,4 @@
-# Pixelizator (multifile_honeygrid)
+# Pixelizator (`example.cpp` + `pixelizator_analysis.ipynb`)
 
 `pixelizator` — адаптивная анизотропная перепикселизация изображения из гексагональной камеры IACT в квадратную сетку с сохранением структуры ливня.
 
@@ -72,15 +72,21 @@
 - `--use-global-orientation`
 - `--use-dynamic-radius`
 
+> В ноутбуке аргументы разбираются через `parse_known_args()`, поэтому его можно запускать как в Jupyter, так и в CLI-режиме (`jupyter nbconvert --execute ...` / `python` после экспорта в `.py`).
+
 ## Запуск ROOT-версии
 
+ROOT-макрос в репозитории называется `example.cpp` (внутри него определена функция `multifile_honeygrid()`).
 Файл с данными должен быть в той же папке, что и макрос.
 
 ```bash
-root -l multifile_honeygrid.cpp
+root -l example.cpp
 ```
 
-После запуска создаются визуализации и txt-файлы в квадратной сетке (папка `fullfile`).
+После запуска создаются:
+
+- визуализации (`*.png`) в папке `fullfile`;
+- txt-файлы квадратной сетки (`square_grid_event_<id>.txt`) в папке `fullfile`.
 
 ---
 
