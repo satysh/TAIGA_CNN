@@ -91,17 +91,75 @@ class EventVisualizer:
 
         # --- Старый формат датасета (обратная совместимость) ---
         if hasattr(dataset, "data"):
-            image = dataset.data[event_idx, 0]
-            fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-            im = ax.imshow(
+            image = np.asarray(dataset.data[event_idx, 0], dtype=np.float64)
+
+            fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+            # LEFT: исходная CNN-сетка 27x27
+            im = axes[0].imshow(
                 np.log10(image + 1e-3) if log_scale else image,
                 origin="lower",
                 cmap="jet",
                 extent=[-13, 13, -13, 13],
             )
-            ax.set_aspect("equal")
-            ax.set_title("CNN grid")
-            plt.colorbar(im, ax=ax, fraction=0.046)
+            axes[0].set_aspect("equal")
+            axes[0].set_title("CNN grid (27x27)")
+            plt.colorbar(im, ax=axes[0], fraction=0.046)
+
+            # RIGHT: приближённое обратное преобразование square(27x27) -> hex-camera.
+            # Для каждой ячейки (row, col) строим hex-центр в "axial-like" геометрии
+            # и красим его значением из square-сетки.
+            pitch = 1.0
+            dy = np.sqrt(3.0) / 2.0
+            hex_radius = 1.0 / np.sqrt(3.0)
+
+            rr, cc = np.indices((27, 27))
+            rows = rr.astype(np.int64) - 13
+            cols = cc.astype(np.int64) - 13
+
+            xs = cols.astype(np.float64) * pitch + 0.5 * pitch * (rows & 1)
+            ys = rows.astype(np.float64) * dy
+
+            vals = image.astype(np.float64)
+            if log_scale:
+                vals = np.log10(np.clip(vals, 0.0, None) + 1e-3)
+
+            # Нулевые ячейки делаем NaN -> светло-серый фон, сигнал остаётся цветным.
+            draw_vals = vals.copy()
+            draw_vals[np.isclose(image, 0.0)] = np.nan
+
+            patches = [
+                RegularPolygon((x, y), numVertices=6, radius=hex_radius, orientation=0)
+                for x, y in zip(xs.ravel(), ys.ravel())
+            ]
+
+            cmap = plt.cm.get_cmap("jet").copy()
+            cmap.set_bad(color="lightgray")
+
+            coll = PatchCollection(
+                patches,
+                cmap=cmap,
+                edgecolor="black",
+                linewidth=0.2,
+            )
+            coll.set_array(draw_vals.ravel())
+
+            finite = np.isfinite(draw_vals)
+            if np.any(finite):
+                vmin = float(np.nanmin(draw_vals[finite]))
+                vmax = float(np.nanmax(draw_vals[finite]))
+                if np.isclose(vmin, vmax):
+                    vmax = vmin + 1e-6
+                coll.set_clim(vmin, vmax)
+
+            axes[1].add_collection(coll)
+            pad = 1.5
+            axes[1].set_xlim(float(np.min(xs) - pad), float(np.max(xs) + pad))
+            axes[1].set_ylim(float(np.min(ys) - pad), float(np.max(ys) + pad))
+            axes[1].set_aspect("equal")
+            axes[1].set_title("Estimated PMT hex camera (from 27x27)")
+            plt.colorbar(coll, ax=axes[1], fraction=0.046)
+
             plt.tight_layout()
             plt.show()
             return
