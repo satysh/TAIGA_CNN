@@ -34,8 +34,7 @@ class EventVisualizer:
             cam_colors = np.full(len(dataset.camera_xy), np.nan, dtype=np.float64)
 
             for xi, yi, ai in zip(x, y, a):
-                key = dataset._xy_key(xi, yi)
-                idx = dataset.camera_key_to_idx.get(key, None)
+                idx = dataset._camera_idx(xi, yi)
                 if idx is None:
                     continue
                 if ai > 0:
