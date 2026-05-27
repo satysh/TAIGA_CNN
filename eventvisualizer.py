@@ -92,16 +92,61 @@ class EventVisualizer:
         # --- Старый формат датасета (обратная совместимость) ---
         if hasattr(dataset, "data"):
             image = dataset.data[event_idx, 0]
-            fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-            im = ax.imshow(
+
+            fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+            # LEFT: исходная CNN-сетка 27x27
+            im = axes[0].imshow(
                 np.log10(image + 1e-3) if log_scale else image,
                 origin="lower",
                 cmap="jet",
                 extent=[-13, 13, -13, 13],
             )
-            ax.set_aspect("equal")
-            ax.set_title("CNN grid")
-            plt.colorbar(im, ax=ax, fraction=0.046)
+            axes[0].set_aspect("equal")
+            axes[0].set_title("CNN grid (27x27)")
+            plt.colorbar(im, ax=axes[0], fraction=0.046)
+
+            # RIGHT: оценка hex-камеры напрямую из row/col индексов
+            # row/col в CorsikaData лежат в диапазоне [-13..13] и центрированы относительно 0.
+            rows, cols = np.nonzero(image > 0)
+            amps = image[rows, cols].astype(np.float64)
+            rows = rows.astype(np.int64) - 13
+            cols = cols.astype(np.int64) - 13
+
+            if rows.size > 0:
+                pitch = 1.0
+                dy = np.sqrt(3.0) / 2.0
+                hex_radius = 1.0 / np.sqrt(3.0)
+
+                xs = cols.astype(np.float64) * pitch + 0.5 * pitch * (rows & 1)
+                ys = rows.astype(np.float64) * dy
+
+                patches = [
+                    RegularPolygon((x, y), numVertices=6, radius=hex_radius, orientation=0)
+                    for x, y in zip(xs, ys)
+                ]
+                colors = np.log10(amps + 1e-3) if log_scale else amps
+
+                coll = PatchCollection(
+                    patches,
+                    cmap="jet",
+                    edgecolor="black",
+                    linewidth=0.25,
+                )
+                coll.set_array(colors)
+                coll.set_clim(np.nanmin(colors), np.nanmax(colors))
+                axes[1].add_collection(coll)
+
+                pad = 1.5
+                axes[1].set_xlim(float(np.min(xs) - pad), float(np.max(xs) + pad))
+                axes[1].set_ylim(float(np.min(ys) - pad), float(np.max(ys) + pad))
+                axes[1].set_aspect("equal")
+                axes[1].set_title("Estimated PMT hex camera")
+                plt.colorbar(coll, ax=axes[1], fraction=0.046)
+            else:
+                axes[1].set_title("Estimated PMT hex camera (no non-zero pixels)")
+                axes[1].set_aspect("equal")
+
             plt.tight_layout()
             plt.show()
             return
