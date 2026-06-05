@@ -76,6 +76,30 @@ class CleanEventDataset:
     def _xy_key(self, x, y):
         return (round(float(x), self._key_decimals), round(float(y), self._key_decimals))
 
+    def _camera_idx(self, x, y):
+        """
+        Надёжно сопоставляет (x, y) пикселя индексу пикселя камеры.
+
+        1) Быстрый путь: exact-key по округлению.
+        2) Fallback: ближайший центр камеры в радиусе tolerance.
+        """
+        key = self._xy_key(x, y)
+        idx = self.camera_key_to_idx.get(key)
+        if idx is not None:
+            return idx
+
+        if not hasattr(self, '_camera_xy_np'):
+            self._camera_xy_np = np.array(self.camera_xy, dtype=np.float64)
+
+        pt = np.array([float(x), float(y)], dtype=np.float64)
+        d2 = np.sum((self._camera_xy_np - pt) ** 2, axis=1)
+        j = int(np.argmin(d2))
+
+        tol = max(1e-3, 0.35 * float(self.pitch))
+        if np.sqrt(d2[j]) <= tol:
+            return j
+        return None
+
     def _build_camera_geometry(self, n_events: int = 500):
         """
         Камера = все уникальные (x,y), которые встречаются в первых n_events событий.
@@ -164,8 +188,7 @@ class CleanEventDataset:
         cols = []
 
         for xi, yi in zip(x, y):
-            key = self._xy_key(xi, yi)
-            idx = self.camera_key_to_idx.get(key, None)
+            idx = self._camera_idx(xi, yi)
             if idx is None:
                 continue
 

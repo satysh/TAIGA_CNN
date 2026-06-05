@@ -35,8 +35,7 @@ class EventVisualizer:
             cam_xy_arr = np.array(dataset.camera_xy, dtype=np.float64)
 
             for xi, yi, ai in zip(x, y, a):
-                key = dataset._xy_key(xi, yi)
-                idx = dataset.camera_key_to_idx.get(key, None)
+                idx = dataset._camera_idx(xi, yi)
                 if idx is None:
                     # fallback: nearest pixel in camera geometry (защита от ошибок округления)
                     d2 = (cam_xy_arr[:, 0] - float(xi)) ** 2 + (cam_xy_arr[:, 1] - float(yi)) ** 2
